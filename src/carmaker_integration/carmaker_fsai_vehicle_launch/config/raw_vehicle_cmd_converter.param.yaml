@@ -1,0 +1,16 @@
+/**:
+  ros__parameters:
+    csv_path_accel_map: $(find-pkg-share carmaker_fsai_vehicle_launch)/data/accel_map.csv
+    csv_path_brake_map: $(find-pkg-share carmaker_fsai_vehicle_launch)/data/brake_map.csv
+    convert_accel_cmd: true
+    convert_brake_cmd: true
+    convert_steer_cmd: false
+    use_steer_ff: false
+    use_steer_fb: false
+    is_debugging: false
+    max_throttle: 1.0
+    max_brake: 1.0
+    max_steer: 0.70
+    min_steer: -0.70
+    convert_actuation_to_steering_status: false
+

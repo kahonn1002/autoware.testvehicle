@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:property name="vehicle_info" value="${xacro.load_yaml('$(find carmaker_fsai_vehicle_description)/config/vehicle_info.param.yaml')}"/>
+  <link name="base_link">
+    <visual>
+      <origin xyz="0.842 0 0.5" rpy="0 0 0"/>
+      <geometry><box size="2.650 1.400 1.000"/></geometry>
+      <material name="fsai_blue"><color rgba="0.05 0.25 0.8 0.7"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0.842 0 0.5" rpy="0 0 0"/>
+      <geometry><box size="2.650 1.400 1.000"/></geometry>
+    </collision>
+  </link>
+</robot>
+

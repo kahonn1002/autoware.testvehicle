@@ -1,0 +1,16 @@
+base_link:
+  carmaker_lidar:
+    x: 1.7
+    y: 0.0
+    z: 0.57
+    roll: 0.0
+    pitch: 0.0
+    yaw: 0.0
+  carmaker_imu:
+    x: 1.3
+    y: 0.0
+    z: 0.3
+    roll: 0.0
+    pitch: 0.0
+    yaw: 0.0
+

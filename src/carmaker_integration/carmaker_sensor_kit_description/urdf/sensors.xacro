@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<robot name="carmaker_sensor_kit" xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:arg name="config_dir" default="$(find carmaker_sensor_kit_description)/config"/>
+  <xacro:property name="calibration" value="${xacro.load_yaml('$(arg config_dir)/sensor_kit_calibration.yaml')}"/>
+  <joint name="carmaker_lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="carmaker_lidar"/>
+    <origin
+      xyz="${calibration['base_link']['carmaker_lidar']['x']} ${calibration['base_link']['carmaker_lidar']['y']} ${calibration['base_link']['carmaker_lidar']['z']}"
+      rpy="${calibration['base_link']['carmaker_lidar']['roll']} ${calibration['base_link']['carmaker_lidar']['pitch']} ${calibration['base_link']['carmaker_lidar']['yaw']}"/>
+  </joint>
+  <link name="carmaker_lidar"/>
+  <joint name="carmaker_imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="carmaker_imu"/>
+    <origin
+      xyz="${calibration['base_link']['carmaker_imu']['x']} ${calibration['base_link']['carmaker_imu']['y']} ${calibration['base_link']['carmaker_imu']['z']}"
+      rpy="${calibration['base_link']['carmaker_imu']['roll']} ${calibration['base_link']['carmaker_imu']['pitch']} ${calibration['base_link']['carmaker_imu']['yaw']}"/>
+  </joint>
+  <link name="carmaker_imu"/>
+</robot>
+

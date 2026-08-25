@@ -4,3 +4,7 @@
 # EXCEPT: Re-include the necessary files.
 !README.md
 !.gitignore
+
+# Track the in-tree CarMaker integration packages in this repository.
+!carmaker_integration/
+!carmaker_integration/**

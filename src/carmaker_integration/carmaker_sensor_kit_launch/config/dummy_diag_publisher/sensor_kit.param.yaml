@@ -1,0 +1,5 @@
+/**:
+  ros__parameters:
+    required_diags:
+      carmaker_interface: default
+
