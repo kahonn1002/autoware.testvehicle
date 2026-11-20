@@ -1,0 +1,50 @@
+diff --git a/ros/ros2_ws/src/hellocm_cmnode/src/CMNode_ROS2_HelloCM.cpp b/ros/ros2_ws/src/hellocm_cmnode/src/CMNode_ROS2_HelloCM.cpp
+index fa5a791..7a7c019 100644
+--- a/ros/ros2_ws/src/hellocm_cmnode/src/CMNode_ROS2_HelloCM.cpp
++++ b/ros/ros2_ws/src/hellocm_cmnode/src/CMNode_ROS2_HelloCM.cpp
+@@ -143,6 +143,7 @@ static struct {
+         int                 gear;
+         double              clutch;
+         std::chrono::steady_clock::time_point last_command;
++        bool watchdog_tripped;
+     } VC; /*!< Vehicle Controls */
+ 
+     struct {
+@@ -187,11 +188,15 @@ void CMNodeHelloCM::vehicleControlCallback(vehiclecontrol_msgs::msg::VehicleCont
+     CMNode.VC.gear = std::max(-1, std::min(5, static_cast<int>(msg->gear)));
+     CMNode.VC.clutch = std::isfinite(msg->clutch) ? std::max(0.0, std::min(1.0, msg->clutch)) : 1.0;
+     CMNode.VC.last_command = std::chrono::steady_clock::now();
++    CMNode.VC.watchdog_tripped = false;
+     if (!std::isfinite(CMNode.VC.gas) || !std::isfinite(CMNode.VC.brake)
+-        || !std::isfinite(CMNode.VC.steer_ang)) {
++        || !std::isfinite(CMNode.VC.steer_ang)
++        || !std::isfinite(CMNode.VC.steer_ang_vel) || !std::isfinite(CMNode.VC.steer_ang_acc)) {
+       CMNode.VC.gas = 0.0;
+       CMNode.VC.brake = 0.5;
+       CMNode.VC.steer_ang = 0.0;
++      CMNode.VC.steer_ang_vel = 0.0;
++      CMNode.VC.steer_ang_acc = 0.0;
+       CMNode.VC.gear = 0;
+       CMNode.VC.clutch = 1.0;
+     }
+@@ -293,6 +298,12 @@ int CMNodeHelloCM::userVehicleControlCalc(const double& dt)
+           CMNode.VC.brake = 0.5;
+           CMNode.VC.gear = 0;
+           CMNode.VC.clutch = 1.0;
++          CMNode.VC.steer_ang_vel = 0.0;
++          CMNode.VC.steer_ang_acc = 0.0;
++          if (!CMNode.VC.watchdog_tripped) {
++            Log::printLog("Autoware VC watchdog: gas=0 brake=0.5 gear=0 clutch=1");
++            CMNode.VC.watchdog_tripped = true;
++          }
+         }
+             
+         /* Assign ROS Topic to CM Vehicle Control Quantities */
+@@ -711,6 +722,7 @@ int CMNodeHelloCM::userTestrunStartAtBegin() {
+         std::chrono::duration_cast<std::chrono::nanoseconds>(epoch).count());
+     CMNode.VC.use_vc = false;
+     CMNode.VC.use_manual_transmission = false;
++    CMNode.VC.watchdog_tripped = false;
+ 
+     { /* set up LidarRSI publisher + job */
+ 

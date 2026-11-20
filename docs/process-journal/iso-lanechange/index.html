@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Reusable visual engineering process journal">
+  <title>Integration Process Journal</title>
+  <link rel="stylesheet" href="journal.css">
+</head>
+<body>
+  <div class="signal-field" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="identity" href="#top" aria-label="Back to top">
+      <span class="identity-mark">PJ</span>
+      <span>
+        <strong>Process Journal</strong>
+        <small>Engineering workflow visualizer</small>
+      </span>
+    </a>
+
+    <nav class="view-switcher" aria-label="Journal views">
+      <button class="view-button active" data-view="pipeline">Pipeline</button>
+      <button class="view-button" data-view="debug">Debug timeline</button>
+      <button class="view-button" data-view="restart">Restart logic</button>
+    </nav>
+
+    <button class="theme-button" id="themeButton" type="button"
+      aria-label="Switch color theme">Light</button>
+  </header>
+
+  <main id="top">
+    <section class="hero shell">
+      <div class="hero-copy">
+        <p class="eyebrow" id="projectEyebrow">SYSTEM INTEGRATION / COMPLETE</p>
+        <h1 id="projectTitle">Loading project…</h1>
+        <p class="hero-summary" id="projectSummary"></p>
+        <div class="status-row" id="statusRow"></div>
+      </div>
+
+      <div class="hero-instrument" aria-label="Project completion overview">
+        <div class="instrument-head">
+          <span>WORKFLOW TRACE</span>
+          <span class="live-dot">VERIFIED</span>
+        </div>
+        <div class="instrument-grid" id="instrumentGrid"></div>
+        <div class="completion-track">
+          <span style="width:100%"></span>
+        </div>
+        <p>Every blocker traced from symptom to root cause to verified fix.</p>
+      </div>
+    </section>
+
+    <section class="architecture shell" aria-labelledby="architectureTitle">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">FINAL SYSTEM</p>
+          <h2 id="architectureTitle">Signal pipeline</h2>
+        </div>
+        <p>Hover or focus a node to isolate its role. The animated trace follows
+          data from simulator sensors to vehicle actuation.</p>
+      </div>
+      <div class="architecture-flow" id="architectureFlow"></div>
+    </section>
+
+    <section class="workflow shell" id="workflowSection" aria-labelledby="workflowTitle">
+      <div class="section-heading workflow-heading">
+        <div>
+          <p class="eyebrow">BUILD + DEBUG SEQUENCE</p>
+          <h2 id="workflowTitle">From isolated workspaces to a moving vehicle</h2>
+        </div>
+        <div class="filter-bar" aria-label="Filter workflow stages">
+          <button class="filter active" data-filter="all">All stages</button>
+          <button class="filter" data-filter="bugs">With bugs</button>
+          <button class="filter" data-filter="critical">Critical path</button>
+        </div>
+      </div>
+
+      <div class="workflow-key" aria-label="Workflow color key">
+        <span><i class="key-build"></i> Build step</span>
+        <span><i class="key-bug"></i> Problem observed</span>
+        <span><i class="key-fix"></i> Fix applied</span>
+        <span><i class="key-result"></i> Verified result</span>
+      </div>
+
+      <div class="timeline" id="timeline"></div>
+    </section>
+
+    <section class="restart shell" id="restartSection" aria-labelledby="restartTitle">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">REUSABLE SAFETY PATTERN</p>
+          <h2 id="restartTitle">Simulation restart state machine</h2>
+        </div>
+        <p>This pattern prevents old routes, transforms, and commands from
+          leaking into a new simulator time epoch.</p>
+      </div>
+      <div class="restart-flow" id="restartFlow"></div>
+    </section>
+
+    <section class="matrix shell" aria-labelledby="matrixTitle">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">FAST REFERENCE</p>
+          <h2 id="matrixTitle">Error → root cause → resolution</h2>
+        </div>
+        <label class="search-box">
+          <span>SEARCH</span>
+          <input id="matrixSearch" type="search" placeholder="Try “occupancy” or “clock”">
+        </label>
+      </div>
+      <div class="matrix-table" id="matrixTable"></div>
+    </section>
+
+    <section class="reuse shell" aria-labelledby="reuseTitle">
+      <div>
+        <p class="eyebrow">USE IT AGAIN</p>
+        <h2 id="reuseTitle">A journal template, not a one-off diagram</h2>
+      </div>
+      <p>The rendering engine is separated from the project record. Replace
+        <code>project-data.js</code> with another project's stages, bugs,
+        fixes, results, architecture, and restart sequence.</p>
+      <a href="#workflowSection">Review workflow</a>
+    </section>
+  </main>
+
+  <footer class="footer shell">
+    <span id="footerProject"></span>
+    <span>Visual journal v0 · reusable HTML/CSS/JS</span>
+  </footer>
+
+  <script src="project-data.js"></script>
+  <script src="journal.js"></script>
+</body>
+</html>

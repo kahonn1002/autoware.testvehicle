@@ -1,0 +1,8 @@
+vehicle_model: carmaker_demo_vehicle
+sensor_model: carmaker_demo_sensor_kit
+vehicle_launch_package: carmaker_demo_vehicle_launch
+interface_package: autoware_carmaker_interface
+interface_params: demo_iso.interface.param.yaml
+converter_params: raw_vehicle_cmd_converter.param.yaml
+map_path: maps/iso_lanechange
+camera_bridge: true

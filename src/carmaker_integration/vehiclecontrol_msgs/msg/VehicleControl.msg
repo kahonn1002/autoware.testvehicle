@@ -7,3 +7,8 @@ float64 steer_ang
 float64 steer_ang_vel
 float64 steer_ang_acc
 
+# Optional manual transmission control; false preserves the original PRNDL path.
+bool use_manual_transmission
+int8 gear
+float64 clutch
+

@@ -132,3 +132,62 @@ The duplicated FSAI vehicle intentionally has
 uses zero pedal as zero acceleration; the original `-55` value made every
 normal low-acceleration command below 50% pedal request regenerative torque
 instead of forward torque.
+
+## 5. Converting other TestRuns
+
+`testrun_to_autoware` turns a CarMaker TestRun into an Autoware map, a scenario
+and a launch profile. Road geometry is evaluated with CarMaker 15's own IPGRoad
+Python API (`Python/IPGRoad` in the installation, IPGRoad license required), so
+the map lies exactly where CarMaker's ground-truth odometry puts the vehicle.
+The newest installed CarMaker is used; pass `--carmaker-home` to override.
+
+```bash
+cd /home/klee/autoware.testvehicle
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+P=/home/klee/project/Carmaker_proj/FSAI_LTS_2026_CM15_Autoware
+ros2 run autoware_carmaker_launch testrun_to_autoware FS_autonomous_Sprint_LTS --project $P --build
+ros2 launch autoware_carmaker_launch carmaker.launch.py profile:=fs_autonomous_sprint_lts
+```
+
+Then load the same TestRun in CarMaker and start it. Once CarMaker's pose has
+initialized localization, `scenario_route_node` sets the converted goal (and
+waypoints); after a TestRun restart it sets the route again. Engage manually,
+or add `auto_engage:=true`.
+
+Each conversion writes:
+
+| Output | Content |
+|---|---|
+| `maps/<name>/lanelet2_map.osm` | Lanelets in CarMaker's global frame (Local projector) |
+| `maps/<name>/pointcloud_map.pcd` | Synthetic road surface plus cone/pylon/post columns; not localization-grade |
+| `maps/<name>/scenario.yaml` | Source hashes, ego start, goal, waypoints, vehicle check, validation, warnings |
+| `config/profiles/<name>.yaml` | Base vehicle/sensor profile with the new map and `auto_route: true` |
+
+The mode is chosen from the ego route (`Vehicle.Routing`):
+
+- `corridor`: a lanelet chain along the route, bounded by `DrvPylon` gates
+  (ISO lane change), by the cone rows (Formula Student; blue left, yellow right,
+  orange cones ignored), or by the path width. Selected when the route has
+  pylons, at least four cones per side, or uses user paths.
+- `network`: every drivable lane of every link (shared boundaries, so lane
+  changes are possible), junction lanes with `turn_direction`, and IPGRoad's
+  path topology. Waypoints on each link of the route make Autoware follow the
+  TestRun's route rather than the shortest one.
+
+Before writing, the map is loaded the way Autoware's Local projector loads it
+and routed from the ego start through the waypoints to the goal with Lanelet2;
+the tool exits non-zero if that fails. Speed limits come from the road
+(`--max-speed-kmh` caps them, default 20 km/h, because the actuation maps are
+uncalibrated). The CarMaker vehicle must map to an existing profile
+(`FS-AI_IMechE_ADS-DV_2026` and `DemoCar` variants); for others pass
+`--base-profile`. Differences between the CarMaker vehicle file and that
+profile's `vehicle_info.param.yaml` are reported as warnings.
+
+Not converted: traffic lights, stop lines and right-of-way rules (Autoware
+does not stop for CarMaker signals), moving traffic (perceived by the LiDAR at
+runtime), elevation-dependent bumps, and start positions other than
+`Vehicle.StartPos.Type = Route`. A route that drives the same lane twice in the
+same direction (SkidPad) produces overlapping lanelets and a warning. TestRuns
+saved by older CarMaker versions may need to be opened and saved once in
+CarMaker 15 before IPGRoad 15 can read their road.

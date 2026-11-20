@@ -22,6 +22,7 @@ setup(
     entry_points={
         "console_scripts": [
             "interface_node = autoware_carmaker_interface.interface_node:main",
+            "scenario_route_node = autoware_carmaker_interface.scenario_route_node:main",
         ],
     },
 )

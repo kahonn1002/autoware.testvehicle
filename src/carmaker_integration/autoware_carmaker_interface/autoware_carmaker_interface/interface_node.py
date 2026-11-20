@@ -25,11 +25,12 @@ from nav_msgs.msg import Odometry
 from rclpy.clock import Clock, ClockType
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import Imu, PointCloud2
+from sensor_msgs.msg import CameraInfo, Image, Imu, PointCloud2
 from std_msgs.msg import Float64
 from tf2_ros import TransformBroadcaster
 from tier4_vehicle_msgs.msg import ActuationCommandStamped, ActuationStatusStamped
 from vehiclecontrol_msgs.msg import VehicleControl
+from .platform_helpers import ManualTransmission, rotate_vector, shift_acceleration, shift_velocity
 
 NANOSECONDS_PER_SECOND = 1_000_000_000
 
@@ -138,7 +139,9 @@ class CarMakerInterface(Node):
         self.pointcloud_pub = self.create_publisher(
             PointCloud2, self.output_pointcloud_topic, reliable_qos
         )
-        self.imu_pub = self.create_publisher(Imu, self.output_imu_topic, sensor_qos)
+        # AEB's polling subscriber requests RELIABLE. A reliable publisher also
+        # serves best-effort sensor consumers; keep the raw input best-effort.
+        self.imu_pub = self.create_publisher(Imu, self.output_imu_topic, reliable_qos)
         self.acceleration_pub = self.create_publisher(
             AccelWithCovarianceStamped,
             self.output_acceleration_topic,
@@ -206,6 +209,26 @@ class CarMakerInterface(Node):
         self.last_odometry_wall = None
         self.last_pointcloud_wall = None
         self.last_command_wall = None
+        self.latest_speed = 0.0
+        self.transmission = ManualTransmission()
+        self.camera_counts = {}
+        self.camera_last_stamps = {}
+        self.camera_active_epochs = {}
+        self.camera_retired_epochs = set()
+        self.camera_expected_epoch = None
+        if self.enable_cameras:
+            for name, source, frame in (
+                ("front", "VehSensor_0", "VehSensor_0"),
+                ("rear", "VehSensor_1", "VehSensor_1"),
+            ):
+                self.camera_counts[name] = 0
+                self.camera_last_stamps[name] = None
+                image_pub = self.create_publisher(Image, f"/sensing/camera/{name}/image_raw", sensor_qos)
+                info_pub = self.create_publisher(CameraInfo, f"/sensing/camera/{name}/camera_info", sensor_qos)
+                self.create_subscription(Image, f"/{source}/image_raw",
+                    self._camera_callback(name, frame, image_pub, True), sensor_qos)
+                self.create_subscription(CameraInfo, f"/{source}/camera_info",
+                    self._camera_callback(name, frame, info_pub, False), sensor_qos)
         self.command_active = False
         self.safe_stop_sent = False
         self.latest_steering_tire_angle = 0.0
@@ -220,6 +243,8 @@ class CarMakerInterface(Node):
         self.last_source_odometry_stamp_ns = None
         self.last_source_pointcloud_stamp_ns = None
         self.last_source_imu_stamp_ns = None
+        self.last_imu_omega = None
+        self.source_epoch_offset_ns = None
         self.simulation_reset_count = 0
         self.pointcloud_waiting_for_localization_count = 0
         self.imu_waiting_for_localization_count = 0
@@ -278,6 +303,14 @@ class CarMakerInterface(Node):
             "simulation_reset_tolerance_sec": 0.05,
             "route_clear_retry_sec": 1.0,
             "clear_route_on_simulation_reset": True,
+            "enable_cameras": False,
+            "require_camera_epoch": False,
+            "use_manual_transmission": False,
+            "publish_vehicle_control": True,
+            "source_base_offset_x": 0.0,
+            "source_base_offset_y": 0.0,
+            "source_base_offset_z": 0.0,
+            "hardware_id": "FSAI_LTS_2026_CM15_Autoware",
         }
         for name, value in defaults.items():
             self.declare_parameter(name, value)
@@ -303,6 +336,7 @@ class CarMakerInterface(Node):
             "base_frame",
             "lidar_frame",
             "imu_frame",
+            "hardware_id",
         ]
         float_names = [
             "map_offset_x",
@@ -322,6 +356,9 @@ class CarMakerInterface(Node):
             "stale_sensor_timeout_sec",
             "simulation_reset_tolerance_sec",
             "route_clear_retry_sec",
+            "source_base_offset_x",
+            "source_base_offset_y",
+            "source_base_offset_z",
         ]
         for name in string_names:
             setattr(self, name, str(self.get_parameter(name).value))
@@ -338,10 +375,21 @@ class CarMakerInterface(Node):
         self.clear_route_on_simulation_reset = bool(
             self.get_parameter("clear_route_on_simulation_reset").value
         )
+        self.enable_cameras = bool(self.get_parameter("enable_cameras").value)
+        self.require_camera_epoch = bool(self.get_parameter("require_camera_epoch").value)
+        self.use_manual_transmission = bool(self.get_parameter("use_manual_transmission").value)
+        self.publish_vehicle_control = bool(self.get_parameter("publish_vehicle_control").value)
+        if not self.publish_vehicle_control:
+            self.get_logger().warning("Data-only run: CarMaker vehicle-command publication is disabled")
 
     def _on_odometry(self, msg: Odometry) -> None:
         source_stamp_ns = stamp_to_nanoseconds(msg.header.stamp)
-        if is_time_regression(
+        source_epoch = None
+        if self.require_camera_epoch and msg.header.frame_id.startswith("map__epoch_"):
+            source_epoch = msg.header.frame_id[len("map__epoch_"):] or None
+        epoch_changed = (self.require_camera_epoch and self.camera_expected_epoch is not None
+                         and source_epoch is not None and source_epoch != self.camera_expected_epoch)
+        if epoch_changed or is_time_regression(
             self.last_source_odometry_stamp_ns,
             source_stamp_ns,
             self.simulation_reset_tolerance_sec,
@@ -349,24 +397,38 @@ class CarMakerInterface(Node):
             self._handle_simulation_reset(
                 self.last_source_odometry_stamp_ns, source_stamp_ns
             )
+        self.camera_expected_epoch = source_epoch
         self.last_source_odometry_stamp_ns = source_stamp_ns
         self.last_odometry_wall = time.monotonic()
         self.odometry_count += 1
         output = copy.deepcopy(msg)
+        offset = (self.source_base_offset_x, self.source_base_offset_y, self.source_base_offset_z)
+        orientation = msg.pose.pose.orientation
+        dx, dy, dz = rotate_vector((orientation.x, orientation.y, orientation.z, orientation.w), offset)
+        output.pose.pose.position.x += dx
+        output.pose.pose.position.y += dy
+        output.pose.pose.position.z += dz
+        velocity, omega = msg.twist.twist.linear, msg.twist.twist.angular
+        vx, vy, vz = shift_velocity((velocity.x, velocity.y, velocity.z),
+            (omega.x, omega.y, omega.z), offset)
+        output.twist.twist.linear.x, output.twist.twist.linear.y, output.twist.twist.linear.z = vx, vy, vz
+        self.latest_speed = vx
         output.header.stamp = self.get_clock().now().to_msg()
+        if self.source_epoch_offset_ns is None:
+            self.source_epoch_offset_ns = stamp_to_nanoseconds(output.header.stamp)-source_stamp_ns
         self.latest_localization_stamp = copy.deepcopy(output.header.stamp)
         output.header.frame_id = self.map_frame
         output.child_frame_id = self.base_frame
         x, y = transform_xy(
-            msg.pose.pose.position.x,
-            msg.pose.pose.position.y,
+            output.pose.pose.position.x,
+            output.pose.pose.position.y,
             self.map_yaw_offset,
             self.map_offset_x,
             self.map_offset_y,
         )
         output.pose.pose.position.x = x
         output.pose.pose.position.y = y
-        output.pose.pose.position.z = msg.pose.pose.position.z + self.map_offset_z
+        output.pose.pose.position.z += self.map_offset_z
         yaw_rotation = (0.0, 0.0, math.sin(self.map_yaw_offset / 2.0), math.cos(self.map_yaw_offset / 2.0))
         source_q = (
             msg.pose.pose.orientation.x,
@@ -449,6 +511,8 @@ class CarMakerInterface(Node):
 
     def _on_pointcloud(self, msg: PointCloud2) -> None:
         source_stamp_ns = stamp_to_nanoseconds(msg.header.stamp)
+        if source_stamp_ns == self.last_source_pointcloud_stamp_ns:
+            return
         if sensor_precedes_odometry_epoch(
             self.last_source_pointcloud_stamp_ns,
             source_stamp_ns,
@@ -471,8 +535,46 @@ class CarMakerInterface(Node):
         output.header.frame_id = self.lidar_frame
         self.pointcloud_pub.publish(output)
 
+    def _camera_callback(self, name, frame, publisher, is_image):
+        def callback(msg):
+            # Humble's executor supports message-only callbacks. Epoch IDs
+            # are carried by raw frame_id and matched against the odometry TestRun ID.
+            self._on_camera(msg, name, frame, publisher, is_image)
+        return callback
+
+    def _on_camera(self, msg, name, frame, publisher, is_image):
+        if self.latest_localization_stamp is None or self.last_source_odometry_stamp_ns is None:
+            return
+        if self.require_camera_epoch:
+            epoch = msg.header.frame_id
+            if (self.camera_expected_epoch is None
+                    or epoch != frame+"__epoch_"+self.camera_expected_epoch
+                    or epoch in self.camera_retired_epochs):
+                return
+            self.camera_active_epochs[name] = epoch
+        source_stamp = stamp_to_nanoseconds(msg.header.stamp)
+        # Images from the previous TestRun must never be placed in the new epoch.
+        age = self.last_source_odometry_stamp_ns - source_stamp
+        if age < -100_000_000 or age > 500_000_000:
+            return
+        if is_image:
+            if source_stamp == self.camera_last_stamps[name]:
+                return
+            self.camera_last_stamps[name] = source_stamp
+            self.camera_counts[name] += 1
+        output = copy.deepcopy(msg)
+        epoch_offset = self.source_epoch_offset_ns
+        if epoch_offset is None:
+            return
+        stamp_ns = max(0, source_stamp + epoch_offset)
+        output.header.stamp.sec = stamp_ns // NANOSECONDS_PER_SECOND
+        output.header.stamp.nanosec = stamp_ns % NANOSECONDS_PER_SECOND
+        output.header.frame_id = frame
+        publisher.publish(output)
+
     def _on_imu(self, msg: Imu) -> None:
         source_stamp_ns = stamp_to_nanoseconds(msg.header.stamp)
+        previous_stamp = self.last_source_imu_stamp_ns
         if sensor_precedes_odometry_epoch(
             self.last_source_imu_stamp_ns,
             source_stamp_ns,
@@ -486,6 +588,14 @@ class CarMakerInterface(Node):
             return
 
         output = copy.deepcopy(msg)
+        omega = (msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z)
+        dt = (source_stamp_ns-previous_stamp)/NANOSECONDS_PER_SECOND if previous_stamp is not None else 0.
+        alpha = tuple((a-b)/dt for a,b in zip(omega,self.last_imu_omega)) if self.last_imu_omega is not None and 0.001 <= dt <= .1 else (0.,0.,0.)
+        self.last_imu_omega = omega
+        acceleration = msg.linear_acceleration
+        ax, ay, az = shift_acceleration((acceleration.x, acceleration.y, acceleration.z), omega, alpha,
+            (self.source_base_offset_x,self.source_base_offset_y,self.source_base_offset_z))
+        output.linear_acceleration.x, output.linear_acceleration.y, output.linear_acceleration.z = ax, ay, az
         output.header.stamp = copy.deepcopy(self.latest_localization_stamp)
         output.header.frame_id = self.imu_frame
         self.imu_pub.publish(output)
@@ -547,6 +657,8 @@ class CarMakerInterface(Node):
     def _publish_control(
         self, gas: float, brake: float, tire_angle: float, tire_rate: float
     ) -> None:
+        if not self.publish_vehicle_control:
+            return
         command = VehicleControl()
         command.use_vc = True
         command.selector_ctrl = self.current_selector
@@ -559,6 +671,17 @@ class CarMakerInterface(Node):
             tire_rate, -abs(self.max_steering_rate), abs(self.max_steering_rate)
         )
         command.steer_ang_acc = 0.0
+        command.use_manual_transmission = self.use_manual_transmission
+        if self.use_manual_transmission:
+            odom_stale = self.last_odometry_wall is None or time.monotonic()-self.last_odometry_wall > self.stale_sensor_timeout_sec
+            direction = 1 if self.current_selector == self.selector_drive else (-1 if self.current_selector == self.selector_reverse else 0)
+            direction_change = direction*self.latest_speed < -0.2
+            safe_stop = odom_stale or self.command_hold_active or self.safe_stop_sent or direction_change
+            manual = self.transmission.step(self.get_clock().now().nanoseconds / NANOSECONDS_PER_SECOND,
+                self.latest_speed, direction, command.gas, command.brake, safe_stop=safe_stop)
+            command.gear, command.clutch, command.gas = manual.gear, manual.clutch, manual.gas
+            if safe_stop:
+                command.brake = max(command.brake, self.timeout_brake)
         self.latest_actuation = (command.gas, command.brake, command.steer_ang)
         self.vehicle_control_pub.publish(command)
 
@@ -587,6 +710,14 @@ class CarMakerInterface(Node):
         self.last_pointcloud_wall = None
         self.latest_localization_stamp = None
         self.latest_steering_tire_angle = 0.0
+        self.latest_speed = 0.0
+        self.transmission.reset()
+        self.last_imu_omega = None
+        self.source_epoch_offset_ns = None
+        self.camera_expected_epoch = None
+        self.camera_retired_epochs.update(self.camera_active_epochs.values())
+        self.camera_active_epochs.clear()
+        self.camera_last_stamps = {name: None for name in self.camera_last_stamps}
         self.current_selector = self.selector_drive
         self.current_gear_report = GearReport.DRIVE
         self.command_hold_active = True
@@ -653,10 +784,11 @@ class CarMakerInterface(Node):
         age = time.monotonic() - self.last_command_wall
         if age <= self.command_timeout_sec or self.safe_stop_sent:
             return
-        self._publish_control(0.0, self.timeout_brake, 0.0, 0.0)
         self.safe_stop_sent = True
+        self._publish_control(0.0, self.timeout_brake, 0.0, 0.0)
+        action = "applying safe brake" if self.publish_vehicle_control else "vehicle-command publication remains disabled"
         self.get_logger().error(
-            f"Autoware actuation command stale for {age:.3f}s; applying safe brake"
+            f"Autoware actuation command stale for {age:.3f}s; {action}"
         )
 
     def _publish_diagnostics(self) -> None:
@@ -671,13 +803,15 @@ class CarMakerInterface(Node):
         )
         status = DiagnosticStatus()
         status.name = "carmaker/interface"
-        status.hardware_id = "FSAI_LTS_2026_CM15_Autoware"
+        status.hardware_id = self.hardware_id
         status.level = DiagnosticStatus.ERROR if stale else DiagnosticStatus.OK
         status.message = "waiting for or receiving stale CarMaker data" if stale else "connected"
         status.values = [
             KeyValue(key="odometry_count", value=str(self.odometry_count)),
             KeyValue(key="pointcloud_count", value=str(self.pointcloud_count)),
             KeyValue(key="command_count", value=str(self.command_count)),
+            KeyValue(key="camera_counts", value=str(self.camera_counts)),
+            KeyValue(key="manual_gear", value=str(self.transmission.gear)),
             KeyValue(key="command_safe_stop", value=str(self.safe_stop_sent)),
             KeyValue(
                 key="simulation_reset_count",

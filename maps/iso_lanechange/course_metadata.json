@@ -1,0 +1,33 @@
+{
+  "source": "/home/klee/project/Carmaker_proj/FSAI_LTS_2026_CM15_Autoware/Data/TestRun/LaneChange_ISO_Camera_RSI",
+  "sha256": "ee0fb48f1c352d37e8faf9f3537ba7ed2411a5660460c046a74bc5b129dbb100",
+  "length_m": 700.0,
+  "gate_sections": [
+    [
+      500.0,
+      515.0,
+      0.0,
+      2.142
+    ],
+    [
+      545.0,
+      570.0,
+      3.5,
+      2.314
+    ],
+    [
+      595.0,
+      625.0,
+      0.0,
+      2.486
+    ]
+  ],
+  "speed_limit_kmh": 10.0,
+  "localization": "CarMaker ground truth",
+  "pcd": "sampled flat road and pylon gate geometry; not an NDT localization scan",
+  "goal": {
+    "x": 650.0,
+    "y": 0.0,
+    "yaw": 0.0
+  }
+}

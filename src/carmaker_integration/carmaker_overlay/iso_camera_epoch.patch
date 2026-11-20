@@ -1,0 +1,32 @@
+--- a/ros/ros2_ws/src/hellocm_cmnode/src/CMNode_ROS2_HelloCM.cpp
++++ b/ros/ros2_ws/src/hellocm_cmnode/src/CMNode_ROS2_HelloCM.cpp
+@@ -33,6 +33,7 @@
+ #include <cmath>
+ #include <cstring>
+ #include <csignal>
++#include <chrono>
+ #include <sys/wait.h>
+ #include <unistd.h>
+ 
+@@ -925,6 +926,12 @@
+             Camera.Socket                   = iGetIntOpt(Inf_Vehicle, sbuf, 0);
+ 
+             /* Do a system call to ros2 launch and launch the ROS node */
++            std::string raw_camera_frame = Camera.name;
++            if (CMNode.Misc.external_sensor_tf) {
++              const auto epoch = std::chrono::steady_clock::now().time_since_epoch();
++              raw_camera_frame += "__epoch_" + std::to_string(
++                  std::chrono::duration_cast<std::chrono::nanoseconds>(epoch).count());
++            }
+             sprintf(sbuf, "ros2 launch carmaker_rsds_client carmaker_rsds_client.launch.py \
+             camera_no:=%d \
+             camera_name:=%s \
+@@ -936,7 +943,7 @@
+             height:=%f publish_tf:=%s derive_intrinsics:=true rqt_image_view:=false",
+             Camera.number,
+             Camera.name,
+-            Camera.name,
++            raw_camera_frame.c_str(),
+             Camera.Socket,
+             Camera.pos[0],Camera.pos[1],Camera.pos[2],Camera.rot[0],Camera.rot[1],Camera.rot[2],
+             Camera.FoV,

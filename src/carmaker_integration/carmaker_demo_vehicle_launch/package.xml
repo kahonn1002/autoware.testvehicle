@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>carmaker_demo_vehicle_launch</name>
+  <version>0.1.0</version>
+  <description>Raw vehicle command conversion for the CarMaker DemoCar model (initial placeholder).</description>
+  <maintainer email="no@support.com">DemoCar</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>autoware_raw_vehicle_cmd_converter</exec_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

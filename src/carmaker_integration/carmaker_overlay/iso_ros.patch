@@ -1,0 +1,193 @@
+--- a/ros/ros2_ws/src/hellocm_cmnode/src/CMNode_ROS2_HelloCM.cpp
++++ b/ros/ros2_ws/src/hellocm_cmnode/src/CMNode_ROS2_HelloCM.cpp
+@@ -134,10 +134,14 @@
+         double              steer_ang;
+         double              steer_ang_vel;
+         double              steer_ang_acc;
++        bool                use_manual_transmission;
++        int                 gear;
++        double              clutch;
+     } VC; /*!< Vehicle Controls */
+ 
+     struct {
+         int nSensors;
++        int external_sensor_tf;
+     } Misc;
+ } CMNode;
+ 
+@@ -172,6 +176,9 @@
+     CMNode.VC.steer_ang       = msg->steer_ang;
+     CMNode.VC.steer_ang_vel   = msg->steer_ang_vel;
+     CMNode.VC.steer_ang_acc   = msg->steer_ang_acc;
++    CMNode.VC.use_manual_transmission = msg->use_manual_transmission;
++    CMNode.VC.gear = std::max(-1, std::min(5, static_cast<int>(msg->gear)));
++    CMNode.VC.clutch = std::isfinite(msg->clutch) ? std::max(0.0, std::min(1.0, msg->clutch)) : 1.0;
+ 
+ /*
+     in->Msg.key             = msg->key;
+@@ -269,6 +276,10 @@
+         /* -->Pedal Positions (add clutch if needed for manual) */
+         VehicleControl.Gas              = CMNode.VC.gas;
+         VehicleControl.Brake            = CMNode.VC.brake;
++        if (CMNode.VC.use_manual_transmission) {
++            VehicleControl.GearNo = CMNode.VC.gear;
++            VehicleControl.Clutch = CMNode.VC.clutch;
++        }
+ 
+         /* -->Steer by angle inputs (add steer torque if using GenTorque model) */
+         VehicleControl.Steering.Ang     = CMNode.VC.steer_ang;
+@@ -483,7 +494,7 @@
+ void CMNodeHelloCM::imuFillMsg(sensor_msgs::msg::Imu& msg) {
+ 
+   msg.header.stamp    = rclcpp::Time(static_cast<int64_t>(1e9 * SimCore.Time), RCL_ROS_TIME);
+-  msg.header.frame_id = "base_link";
++  msg.header.frame_id = CMNode.Misc.external_sensor_tf ? "carmaker_vehicle_origin" : "base_link";
+ 
+   /* Orientation as quaternion from Euler angles
+    * C-code: Vehicle.Roll / Vehicle.Pitch / Vehicle.Yaw
+@@ -505,6 +516,15 @@
+   msg.linear_acceleration.x = Car.ConBdy1.a_1[0];
+   msg.linear_acceleration.y = Car.ConBdy1.a_1[1];
+   msg.linear_acceleration.z = Car.ConBdy1.a_1[2];
++  if (CMNode.Misc.external_sensor_tf) {
++    double body_acceleration[3] = {0, 0, 0};
++    for (int axis = 0; axis < 3; ++axis)
++      for (int world = 0; world < 3; ++world)
++        body_acceleration[axis] += Car.Fr1.Tr2Fr0[world][axis] * Car.Fr1.a_0[world];
++    msg.linear_acceleration.x = body_acceleration[0];
++    msg.linear_acceleration.y = body_acceleration[1];
++    msg.linear_acceleration.z = body_acceleration[2];
++  }
+ }
+ 
+ /* ============================================================
+@@ -540,7 +560,7 @@
+ 
+   msg.header.stamp = stamp;
+   msg.header.frame_id = "map";
+-  msg.child_frame_id = "base_link";
++  msg.child_frame_id = CMNode.Misc.external_sensor_tf ? "carmaker_vehicle_origin" : "base_link";
+ 
+   msg.pose.pose.position.x = Car.Fr1.t_0[0];
+   msg.pose.pose.position.y = Car.Fr1.t_0[1];
+@@ -557,6 +577,16 @@
+   msg.twist.twist.angular.y = Vehicle.PitchVel;
+   msg.twist.twist.angular.z = Vehicle.YawRate;
+ 
++  if (CMNode.Misc.external_sensor_tf) {
++    double body_velocity[3] = {0, 0, 0};
++    for (int axis = 0; axis < 3; ++axis)
++      for (int world = 0; world < 3; ++world)
++        body_velocity[axis] += Car.Fr1.Tr2Fr0[world][axis] * Car.Fr1.v_0[world];
++    msg.twist.twist.linear.x = body_velocity[0];
++    msg.twist.twist.linear.y = body_velocity[1];
++    msg.twist.twist.linear.z = body_velocity[2];
++  }
++
+ }
+ 
+ void CMNodeHelloCM::steeringFillMsg(std_msgs::msg::Float64& msg) {
+@@ -648,6 +678,9 @@
+   if (VehicleInfo_Err == 0) {
+ 
+     CMNode.Misc.nSensors = iGetIntOpt(Inf_Vehicle, "Sensor.N", 0);
++    CMNode.Misc.external_sensor_tf = iGetIntOpt(Inf_Vehicle, "Autoware.SensorTFExternal", 0);
++    CMNode.VC.use_vc = false;
++    CMNode.VC.use_manual_transmission = false;
+ 
+     { /* set up LidarRSI publisher + job */
+ 
+@@ -703,6 +736,11 @@
+         CMNode.Sensor.LidarRSI.rot                      = iGetFixedTableOpt2(Inf_Vehicle, sbuf, def3c, 3, 1);
+         sprintf(sbuf, "Sensor.Param.%d.UpdRate", idxP);
+         CMNode.Sensor.LidarRSI.UpdRate                  = iGetIntOpt(Inf_Vehicle, sbuf, 10);
++        // SensorCluster cycle is the physical scan period (ms), not a frequency.
++        sprintf(sbuf, "Sensor.%d.Ref.Cluster", idxS);
++        const int lidar_cluster = iGetIntOpt(Inf_Vehicle, sbuf, 0);
++        sprintf(sbuf, "SensorCluster.%d.CycleTime", lidar_cluster);
++        CMNode.Sensor.LidarRSI.UpdRate = std::max(1, iGetIntOpt(Inf_Vehicle, sbuf, CMNode.Sensor.LidarRSI.UpdRate));
+         sprintf(sbuf, "Sensor.Param.%d.CycleOffset", idxP);
+         CMNode.Sensor.LidarRSI.nCycleOffset             = iGetIntOpt(Inf_Vehicle, sbuf, 0);
+ 
+@@ -717,7 +755,7 @@
+         sprintf(sbuf, "Sensor.%d.name", idxS);
+         CMNode.TF.Lidar.child_frame_id = "carmaker_lidar";
+         CMNode.TF.Lidar.header.frame_id = "base_link";
+-        transforms.push_back(CMNode.TF.Lidar);
++        if (!CMNode.Misc.external_sensor_tf) transforms.push_back(CMNode.TF.Lidar);
+ 
+         typedef CMJob::RosPublisher<sensor_msgs::msg::PointCloud2> Lidar;
+         auto job = std::make_shared<Lidar>(nhp_, "lidar/front/points");
+@@ -891,7 +929,7 @@
+             param_trans_rot:=[%f,%f,%f,%f,%f,%f] \
+             fov_deg:=%f \
+             width:=%f \
+-            height:=%f &",
++            height:=%f publish_tf:=%s derive_intrinsics:=true rqt_image_view:=false &",
+             Camera.number,
+             Camera.name,
+             Camera.name,
+@@ -899,7 +937,7 @@
+             Camera.pos[0],Camera.pos[1],Camera.pos[2],Camera.rot[0],Camera.rot[1],Camera.rot[2],
+             Camera.FoV,
+             Camera.Resolution[0],
+-            Camera.Resolution[1]);
++            Camera.Resolution[1], CMNode.Misc.external_sensor_tf ? "false" : "true");
+             system(sbuf);
+ 
+             CMNode.Sensor.CameraRSI.push_back(Camera);
+--- a/ros/ros2_ws/src/carmaker_rsds_client/src/carmaker_rsds_client_node.cpp
++++ b/ros/ros2_ws/src/carmaker_rsds_client/src/carmaker_rsds_client_node.cpp
+@@ -387,6 +387,8 @@
+     this->declare_parameter<float>("width", 1080);
+     this->declare_parameter<float>("height", 1920);
+     this->declare_parameter<float>("fov_deg", 60);
++    this->declare_parameter<bool>("publish_tf", true);
++    this->declare_parameter<bool>("derive_intrinsics", false);
+     
+     this->get_parameter("rsds_host", rsdscfg_.MovieHost);
+     this->get_parameter("rsds_port", rsdscfg_.MoviePort);
+@@ -438,6 +440,13 @@
+     std::copy(r_vec.begin(), r_vec.begin() + 9, ci->r.begin());
+     std::copy(p_vec.begin(), p_vec.begin() + 12, ci->p.begin());
+     this->get_parameter("calib_mat_d", ci->d);
++    if (this->get_parameter("derive_intrinsics").as_bool()) {
++      // Direct lens: horizontal FoV and square pixels.
++      const double focal = 0.5 * width / std::tan(0.5 * fov_deg * M_PI / 180.0);
++      ci->k = {focal, 0, 0.5 * width, 0, focal, 0.5 * height, 0, 0, 1};
++      ci->p = {focal, 0, 0.5 * width, 0, 0, focal, 0.5 * height, 0, 0, 0, 1, 0};
++      ci->d = {0, 0, 0, 0, 0};
++    }
+ 
+     /* Declare parameters (binning, distortion) */
+     this->declare_parameter<int>("binning_x", 0);
+@@ -462,7 +471,7 @@
+                angles::from_degrees(param_trans_rot[4] + default_offset[1]),
+                angles::from_degrees(param_trans_rot[5] + default_offset[2]));
+     tf.transform.rotation = tf2::toMsg(rot);
+-    if (tf.header.frame_id != tf.child_frame_id) {
++    if (this->get_parameter("publish_tf").as_bool() && tf.header.frame_id != tf.child_frame_id) {
+         st_br_->sendTransform(tf);
+     } else {
+         RCLCPP_WARN(this->get_logger(),
+--- a/ros/ros2_ws/src/carmaker_rsds_client/launch/carmaker_rsds_client.launch.py
++++ b/ros/ros2_ws/src/carmaker_rsds_client/launch/carmaker_rsds_client.launch.py
+@@ -172,6 +172,9 @@
+           ],
+           output='screen',
+           parameters=[
++               {'publish_tf': LaunchConfiguration('publish_tf')},
++               {'derive_intrinsics': LaunchConfiguration('derive_intrinsics')},
++               {'fov_deg': LaunchConfiguration('fov_deg')},
+                {'camera_no': LaunchConfiguration('camera_no')},
+                {'rsds_host': LaunchConfiguration('rsds_host')},
+                {'rsds_port': LaunchConfiguration('rsds_port')},
+@@ -210,6 +213,8 @@
+      )
+ 
+      return LaunchDescription([
++          DeclareLaunchArgument('publish_tf', default_value='true'),
++          DeclareLaunchArgument('derive_intrinsics', default_value='false'),
+           carmaker_host_arg,
+           camera_no_arg,
+           rsds_host_arg,

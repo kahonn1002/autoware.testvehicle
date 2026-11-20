@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <!-- Bridge (autoware_carmaker_interface) publishes all sensor topics; no native
+       drivers, publishers, or RSDS spawning here. Args kept for Autoware contract. -->
+  <arg name="launch_driver" default="false" description="native drivers not used; bridge handles sensors"/>
+  <arg name="vehicle_mirror_param_file" description="path to the file of vehicle mirror position yaml"/>
+  <arg name="pointcloud_container_name" default="pointcloud_container"/>
+  <group>
+    <!-- Intentionally no nodes: sensing data arrives via the CarMaker bridge. -->
+  </group>
+</launch>

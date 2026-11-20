@@ -1,0 +1,60 @@
+--- a/ros/ros2_ws/src/hellocm_cmnode/src/CMNode_ROS2_HelloCM.cpp
++++ b/ros/ros2_ws/src/hellocm_cmnode/src/CMNode_ROS2_HelloCM.cpp
+@@ -32,6 +32,9 @@
+ 
+ #include <cmath>
+ #include <cstring>
++#include <csignal>
++#include <sys/wait.h>
++#include <unistd.h>
+ 
+ using cm_ros::CMNodeHelloCM;
+ using CMJob::Log;
+@@ -123,6 +126,7 @@
+         } LidarRSI;
+ 
+         std::vector<tCameraRSI> CameraRSI;
++        std::vector<pid_t> CameraLaunchPids;
+ 
+     } Sensor; /*!< Sensor parameters */
+ 
+@@ -929,7 +933,7 @@
+             param_trans_rot:=[%f,%f,%f,%f,%f,%f] \
+             fov_deg:=%f \
+             width:=%f \
+-            height:=%f publish_tf:=%s derive_intrinsics:=true rqt_image_view:=false &",
++            height:=%f publish_tf:=%s derive_intrinsics:=true rqt_image_view:=false",
+             Camera.number,
+             Camera.name,
+             Camera.name,
+@@ -938,7 +942,16 @@
+             Camera.FoV,
+             Camera.Resolution[0],
+             Camera.Resolution[1], CMNode.Misc.external_sensor_tf ? "false" : "true");
+-            system(sbuf);
++            const pid_t camera_pid = fork();
++            if (camera_pid == 0) {
++              setpgid(0, 0);
++              execl("/bin/sh", "sh", "-c", sbuf, static_cast<char*>(nullptr));
++              _exit(127);
++            }
++            if (camera_pid > 0) {
++              setpgid(camera_pid, camera_pid);
++              CMNode.Sensor.CameraLaunchPids.push_back(camera_pid);
++            }
+ 
+             CMNode.Sensor.CameraRSI.push_back(Camera);
+ 
+@@ -1052,7 +1065,11 @@
+ 
+   /* Go through existing CameraRSI RSDS nodes and shut them down */
+   if (!CMNode.Sensor.CameraRSI.empty()) {
+-    system("pkill -f carmaker_rsds_client_node > /dev/null 2>&1");
++    for (const pid_t pid : CMNode.Sensor.CameraLaunchPids) {
++      int status = 0;
++      if (waitpid(pid, &status, WNOHANG) == 0) kill(-pid, SIGINT);
++    }
++    CMNode.Sensor.CameraLaunchPids.clear();
+     CMNode.Sensor.CameraRSI.clear();
+   }
+ 

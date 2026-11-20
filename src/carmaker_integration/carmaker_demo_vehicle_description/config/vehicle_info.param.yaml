@@ -1,0 +1,14 @@
+# Initial placeholder geometry for the DemoCar profile; requires calibration.
+/**:
+  ros__parameters:
+    wheel_radius: 0.318
+    wheel_width: 0.195
+    wheel_base: 2.537
+    wheel_tread: 1.578
+    front_overhang: 0.880
+    rear_overhang: 0.863
+    left_overhang: 0.111
+    right_overhang: 0.111
+    vehicle_height: 1.49
+    # Initial bound only; max_steer_angle requires calibration.
+    max_steer_angle: 0.50

@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <!-- base_link: rear-axle ground origin. Body dims consumed from YAML. -->
+  <xacro:property name="vi" value="${xacro.load_yaml('$(find carmaker_demo_vehicle_description)/config/vehicle_info.param.yaml')['/**']['ros__parameters']}"/>
+  <xacro:property name="body_length" value="${vi['wheel_base'] + vi['front_overhang'] + vi['rear_overhang']}"/>
+  <xacro:property name="body_width" value="${vi['wheel_tread'] + vi['left_overhang'] + vi['right_overhang']}"/>
+  <!-- center x = (front_extent + rear_extent) / 2; front = base+front_oh, rear = -rear_oh -->
+  <xacro:property name="cx" value="${(vi['wheel_base'] + vi['front_overhang'] - vi['rear_overhang']) / 2.0}"/>
+  <xacro:property name="cz" value="${vi['vehicle_height'] / 2.0}"/>
+  <link name="base_link">
+    <visual>
+      <origin xyz="${cx} 0 ${cz}" rpy="0 0 0"/>
+      <geometry><box size="${body_length} ${body_width} ${vi['vehicle_height']}"/></geometry>
+      <material name="demo_grey"><color rgba="0.5 0.5 0.55 0.7"/></material>
+    </visual>
+    <collision>
+      <origin xyz="${cx} 0 ${cz}" rpy="0 0 0"/>
+      <geometry><box size="${body_length} ${body_width} ${vi['vehicle_height']}"/></geometry>
+    </collision>
+  </link>
+</robot>

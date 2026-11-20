@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<robot name="carmaker_demo_sensor_kit" xmlns:xacro="http://ros.org/wiki/xacro">
+  <!-- NOTE: demo_imu is a geometrical mount only; live IMU source stays base_link (ground-truth body). No legacy alias links. -->
+  <xacro:arg name="config_dir" default="$(find carmaker_demo_sensor_kit_description)/config"/>
+  <xacro:property name="calib" value="${xacro.load_yaml('$(arg config_dir)/sensor_kit_calibration.yaml')}"/>
+  <joint name="carmaker_vehicle_origin_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="carmaker_vehicle_origin"/>
+    <origin xyz="${calib['base_link']['carmaker_vehicle_origin']['x']} ${calib['base_link']['carmaker_vehicle_origin']['y']} ${calib['base_link']['carmaker_vehicle_origin']['z']}" rpy="${calib['base_link']['carmaker_vehicle_origin']['roll']} ${calib['base_link']['carmaker_vehicle_origin']['pitch']} ${calib['base_link']['carmaker_vehicle_origin']['yaw']}"/>
+  </joint>
+  <link name="carmaker_vehicle_origin"/>
+  <joint name="carmaker_lidar_joint" type="fixed">
+    <parent link="carmaker_vehicle_origin"/>
+    <child link="carmaker_lidar"/>
+    <origin xyz="${calib['carmaker_vehicle_origin']['carmaker_lidar']['x']} ${calib['carmaker_vehicle_origin']['carmaker_lidar']['y']} ${calib['carmaker_vehicle_origin']['carmaker_lidar']['z']}" rpy="${calib['carmaker_vehicle_origin']['carmaker_lidar']['roll']} ${calib['carmaker_vehicle_origin']['carmaker_lidar']['pitch']} ${calib['carmaker_vehicle_origin']['carmaker_lidar']['yaw']}"/>
+  </joint>
+  <link name="carmaker_lidar"/>
+  <joint name="camera_front_mount_joint" type="fixed">
+    <parent link="carmaker_vehicle_origin"/>
+    <child link="camera_front_mount"/>
+    <origin xyz="${calib['carmaker_vehicle_origin']['camera_front_mount']['x']} ${calib['carmaker_vehicle_origin']['camera_front_mount']['y']} ${calib['carmaker_vehicle_origin']['camera_front_mount']['z']}" rpy="${calib['carmaker_vehicle_origin']['camera_front_mount']['roll']} ${calib['carmaker_vehicle_origin']['camera_front_mount']['pitch']} ${calib['carmaker_vehicle_origin']['camera_front_mount']['yaw']}"/>
+  </joint>
+  <link name="camera_front_mount"/>
+  <joint name="camera_rear_mount_joint" type="fixed">
+    <parent link="carmaker_vehicle_origin"/>
+    <child link="camera_rear_mount"/>
+    <origin xyz="${calib['carmaker_vehicle_origin']['camera_rear_mount']['x']} ${calib['carmaker_vehicle_origin']['camera_rear_mount']['y']} ${calib['carmaker_vehicle_origin']['camera_rear_mount']['z']}" rpy="${calib['carmaker_vehicle_origin']['camera_rear_mount']['roll']} ${calib['carmaker_vehicle_origin']['camera_rear_mount']['pitch']} ${calib['carmaker_vehicle_origin']['camera_rear_mount']['yaw']}"/>
+  </joint>
+  <link name="camera_rear_mount"/>
+  <joint name="demo_imu_joint" type="fixed">
+    <parent link="carmaker_vehicle_origin"/>
+    <child link="demo_imu"/>
+    <origin xyz="${calib['carmaker_vehicle_origin']['demo_imu']['x']} ${calib['carmaker_vehicle_origin']['demo_imu']['y']} ${calib['carmaker_vehicle_origin']['demo_imu']['z']}" rpy="${calib['carmaker_vehicle_origin']['demo_imu']['roll']} ${calib['carmaker_vehicle_origin']['demo_imu']['pitch']} ${calib['carmaker_vehicle_origin']['demo_imu']['yaw']}"/>
+  </joint>
+  <link name="demo_imu"/>
+  <joint name="vehsensor_0_joint" type="fixed">
+    <parent link="camera_front_mount"/>
+    <child link="VehSensor_0"/>
+    <origin xyz="${calib['camera_front_mount']['VehSensor_0']['x']} ${calib['camera_front_mount']['VehSensor_0']['y']} ${calib['camera_front_mount']['VehSensor_0']['z']}" rpy="${calib['camera_front_mount']['VehSensor_0']['roll']} ${calib['camera_front_mount']['VehSensor_0']['pitch']} ${calib['camera_front_mount']['VehSensor_0']['yaw']}"/>
+  </joint>
+  <link name="VehSensor_0"/>
+  <joint name="vehsensor_1_joint" type="fixed">
+    <parent link="camera_rear_mount"/>
+    <child link="VehSensor_1"/>
+    <origin xyz="${calib['camera_rear_mount']['VehSensor_1']['x']} ${calib['camera_rear_mount']['VehSensor_1']['y']} ${calib['camera_rear_mount']['VehSensor_1']['z']}" rpy="${calib['camera_rear_mount']['VehSensor_1']['roll']} ${calib['camera_rear_mount']['VehSensor_1']['pitch']} ${calib['camera_rear_mount']['VehSensor_1']['yaw']}"/>
+  </joint>
+  <link name="VehSensor_1"/>
+</robot>

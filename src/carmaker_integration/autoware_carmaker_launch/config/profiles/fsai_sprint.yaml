@@ -1,0 +1,8 @@
+vehicle_model: carmaker_fsai_vehicle
+sensor_model: carmaker_sensor_kit
+vehicle_launch_package: carmaker_fsai_vehicle_launch
+interface_package: autoware_carmaker_interface
+interface_params: interface.param.yaml
+converter_params: raw_vehicle_cmd_converter.param.yaml
+map_path: maps/fs_autonomous_sprint
+camera_bridge: false

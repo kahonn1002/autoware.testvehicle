@@ -1,0 +1,57 @@
+# Initial placeholder mounts. Positions are relative to carmaker_vehicle_origin,
+# which sits -rear_overhang (-0.863) behind base_link (rear-axle ground).
+# demo_imu is a geometrical sensor mount only; the live source IMU remains the
+# ground-truth body frame (base_link) in the interface until a real source lands.
+base_link:
+  carmaker_vehicle_origin:
+    x: -0.863
+    y: 0.0
+    z: 0.0
+    roll: 0.0
+    pitch: 0.0
+    yaw: 0.0
+carmaker_vehicle_origin:
+  carmaker_lidar:
+    x: 2.25
+    y: 0.0
+    z: 1.5
+    roll: 0.0
+    pitch: 0.0
+    yaw: 0.0
+  camera_front_mount:
+    x: 2.2
+    y: 0.0
+    z: 1.5
+    roll: 0.0
+    pitch: 0.0
+    yaw: 0.0
+  camera_rear_mount:
+    x: 1.0
+    y: 0.0
+    z: 1.3
+    roll: 0.0
+    pitch: 0.0
+    yaw: 3.141592653589793
+  demo_imu:
+    x: 2.9
+    y: 0.3
+    z: 0.8
+    roll: 0.0
+    pitch: 0.0
+    yaw: 0.0
+camera_front_mount:
+  VehSensor_0:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    roll: -1.5707963267948966
+    pitch: 0.0
+    yaw: -1.5707963267948966
+camera_rear_mount:
+  VehSensor_1:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    roll: -1.5707963267948966
+    pitch: 0.0
+    yaw: -1.5707963267948966

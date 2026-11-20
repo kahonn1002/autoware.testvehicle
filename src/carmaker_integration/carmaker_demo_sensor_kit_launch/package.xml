@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>carmaker_demo_sensor_kit_launch</name>
+  <version>0.1.0</version>
+  <description>System diagnostics metadata for the CarMaker DemoCar sensor kit.</description>
+  <maintainer email="no@support.com">DemoCar</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

@@ -1,0 +1,43 @@
+diff --git a/ros/ros2_ws/src/hellocm_cmnode/src/CMNode_ROS2_HelloCM.cpp b/ros/ros2_ws/src/hellocm_cmnode/src/CMNode_ROS2_HelloCM.cpp
+index adc1400..fa5a791 100644
+--- a/ros/ros2_ws/src/hellocm_cmnode/src/CMNode_ROS2_HelloCM.cpp
++++ b/ros/ros2_ws/src/hellocm_cmnode/src/CMNode_ROS2_HelloCM.cpp
+@@ -148,6 +148,7 @@ static struct {
+     struct {
+         int nSensors;
+         int external_sensor_tf;
++        std::string simulation_epoch;
+     } Misc;
+ } CMNode;
+ 
+@@ -584,7 +585,8 @@ void CMNodeHelloCM::odometryFillMsg(nav_msgs::msg::Odometry& msg) {
+   const rclcpp::Time stamp = rclcpp::Time(static_cast<int64_t>(1e9 * SimCore.Time), RCL_ROS_TIME);
+ 
+   msg.header.stamp = stamp;
+-  msg.header.frame_id = "map";
++  msg.header.frame_id = CMNode.Misc.external_sensor_tf
++      ? "map__epoch_" + CMNode.Misc.simulation_epoch : "map";
+   msg.child_frame_id = CMNode.Misc.external_sensor_tf ? "carmaker_vehicle_origin" : "base_link";
+ 
+   msg.pose.pose.position.x = Car.Fr1.t_0[0];
+@@ -704,6 +706,9 @@ int CMNodeHelloCM::userTestrunStartAtBegin() {
+ 
+     CMNode.Misc.nSensors = iGetIntOpt(Inf_Vehicle, "Sensor.N", 0);
+     CMNode.Misc.external_sensor_tf = iGetIntOpt(Inf_Vehicle, "Autoware.SensorTFExternal", 0);
++    const auto epoch = std::chrono::steady_clock::now().time_since_epoch();
++    CMNode.Misc.simulation_epoch = std::to_string(
++        std::chrono::duration_cast<std::chrono::nanoseconds>(epoch).count());
+     CMNode.VC.use_vc = false;
+     CMNode.VC.use_manual_transmission = false;
+ 
+@@ -948,9 +953,7 @@ int CMNodeHelloCM::userTestrunStartAtBegin() {
+             /* Do a system call to ros2 launch and launch the ROS node */
+             std::string raw_camera_frame = Camera.name;
+             if (CMNode.Misc.external_sensor_tf) {
+-              const auto epoch = std::chrono::steady_clock::now().time_since_epoch();
+-              raw_camera_frame += "__epoch_" + std::to_string(
+-                  std::chrono::duration_cast<std::chrono::nanoseconds>(epoch).count());
++              raw_camera_frame += "__epoch_" + CMNode.Misc.simulation_epoch;
+             }
+             sprintf(sbuf, "ros2 launch carmaker_rsds_client carmaker_rsds_client.launch.py \
+             camera_no:=%d \
